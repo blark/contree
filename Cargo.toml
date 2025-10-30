@@ -1,0 +1,33 @@
+[package]
+name = "contree"
+version = "0.1.0"
+edition = "2021"
+authors = ["blark"]
+description = "Visualize the merged filesystem tree of Docker image archives"
+license = "MIT"
+
+[dependencies]
+# Tar archive parsing with full metadata support (uid/gid, hard links, etc.)
+tar = "0.4"
+
+# JSON parsing for manifest.json
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Terminal colors and styling
+owo-colors = { version = "4.1", features = ["supports-colors"] }
+
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive"] }
+
+# Gzip decompression for layer.tar.gz files
+flate2 = "1.0"
+
+# Error handling
+anyhow = "1.0"
+
+# Temporary file/directory management
+tempfile = "3.14"
+
+# Terminal detection for color auto mode
+atty = "0.2"
