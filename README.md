@@ -2,6 +2,8 @@
 
 > Visualize the merged filesystem tree of Docker image archives
 
+![Screenshot](media/screenshot.png)
+
 Contree is a command-line tool that renders the complete, merged filesystem of a Docker image archive (produced by `docker save`) as an ASCII tree. It streams large images efficiently, respects layer order from the manifest, handles Docker whiteouts correctly, and shows you exactly what files and directories would exist in the final container.
 
 ## Features
@@ -80,47 +82,21 @@ Options:
 ### Example with Custom Theme (Kanagawa Dark)
 
 ```bash
-contree image.tar --long --layers --color always --icons nerd \
-  --theme '{"directory":"#7E9CD8","executable":"#98BB6C","symlink":"#7FB4CA","tree_chars":"#54546D","permissions":"#DCD7BA","ownership":"#E6C384","layer_separator":"#957FB8","hardlink":"#727169"}'
-```
-
-## Output Format
-
-### Basic output
-```
-├──  bin
-│   ├──  busybox
-│   ├──  cat -> /bin/busybox
-│   └──  ls -> /bin/busybox
-└──  etc
-    └──  passwd
-```
-
-### Long format (`--long`)
-```
-drwxr-xr-x  0:0 ├──  bin
--rwxr-xr-x  0:0 │   ├──  busybox
--rwxrwxrwx  0:0 │   ├──  cat -> /bin/busybox
--rwxrwxrwx  0:0 │   └──  ls -> /bin/busybox
-drwxr-xr-x  0:0 └──  etc
--rw-r-----  0:42     └──  shadow
-```
-
-### With layers (`--layers`)
-```
-────────────────────── Layer 2d35ebd ───────────────────────
-├──  bin
-│   ├──  busybox
-│   └──  cat -> /bin/busybox
-```
-
-### Hard links
-Hard links are shown with `=>` notation:
-```
-├──  bin
-│   ├──  [
-│   ├──  [[ => bin/[
-│   └──  test => bin/[
+contree image.tar \
+  --long \
+  --layers \
+  --color always \
+  --icons nerd \
+  --theme '{
+    "directory":"#7E9CD8",
+    "executable":"#98BB6C",
+    "symlink":"#7FB4CA",
+    "tree_chars":"#54546D",
+    "permissions":"#DCD7BA",
+    "ownership":"#E6C384",
+    "layer_separator":"#957FB8",
+    "hardlink":"#727169"
+  }'
 ```
 
 ## Understanding Docker Layers
