@@ -34,7 +34,18 @@ pub fn process_archive(archive_path: &Path, show_layers: bool) -> Result<Node> {
     let file = File::open(archive_path)
         .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
 
-    let mut archive = Archive::new(file);
+    // Check if the outer archive is gzipped
+    let is_gzipped = archive_path
+        .to_string_lossy()
+        .ends_with(".gz") || archive_path
+        .to_string_lossy()
+        .ends_with(".tgz");
+
+    let mut archive = if is_gzipped {
+        Archive::new(Box::new(GzDecoder::new(file)) as Box<dyn Read>)
+    } else {
+        Archive::new(Box::new(file) as Box<dyn Read>)
+    };
 
     // First pass: extract manifest and layer files to temporary directory
     let temp_dir = tempfile::tempdir().context("Failed to create temp directory")?;
@@ -42,8 +53,20 @@ pub fn process_archive(archive_path: &Path, show_layers: bool) -> Result<Node> {
     let mut manifest_bytes: Option<Vec<u8>> = None;
 
     for entry in archive.entries().context("Failed to read archive entries")? {
-        let mut entry = entry.context("Failed to read entry")?;
-        let path = entry.path().context("Failed to read entry path")?;
+        let mut entry = match entry {
+            Ok(e) => e,
+            Err(err) => {
+                eprintln!("Warning: Skipping corrupted archive entry: {}", err);
+                continue;
+            }
+        };
+        let path = match entry.path() {
+            Ok(p) => p,
+            Err(err) => {
+                eprintln!("Warning: Skipping entry with invalid path: {}", err);
+                continue;
+            }
+        };
         let path_str = path.to_string_lossy();
 
         // Check if this is manifest.json
