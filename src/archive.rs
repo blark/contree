@@ -31,15 +31,25 @@ fn extract_layer_hash(layer_name: &str, length: usize) -> Option<String> {
 
 /// Process a Docker archive and build the merged filesystem tree
 pub fn process_archive(archive_path: &Path, show_layers: bool) -> Result<Node> {
-    let file = File::open(archive_path)
+    let mut file = File::open(archive_path)
         .with_context(|| format!("Failed to open archive: {}", archive_path.display()))?;
 
-    // Check if the outer archive is gzipped
+    // Check if the outer archive is gzipped - check extension first, then magic bytes
     let is_gzipped = archive_path
         .to_string_lossy()
         .ends_with(".gz") || archive_path
         .to_string_lossy()
-        .ends_with(".tgz");
+        .ends_with(".tgz") || {
+            // Check magic bytes: gzip files start with 0x1f 0x8b
+            let mut magic = [0u8; 2];
+            if file.read_exact(&mut magic).is_ok() {
+                file.seek(std::io::SeekFrom::Start(0)).ok();
+                magic == [0x1f, 0x8b]
+            } else {
+                file.seek(std::io::SeekFrom::Start(0)).ok();
+                false
+            }
+        };
 
     let mut archive = if is_gzipped {
         Archive::new(Box::new(GzDecoder::new(file)) as Box<dyn Read>)
