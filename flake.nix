@@ -6,6 +6,7 @@
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
+      # Prevent duplicate nixpkgs in flake.lock
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -18,8 +19,10 @@
           inherit system overlays;
         };
 
+        # rust-overlay provides granular Rust version control
         rustToolchain = pkgs.rust-bin.stable.latest.default;
 
+        # Custom rustPlatform ensures consistent toolchain across build and dev
         rustPlatform = pkgs.makeRustPlatform {
           cargo = rustToolchain;
           rustc = rustToolchain;
@@ -62,6 +65,7 @@
             cargo-watch
           ];
 
+          # Required for rust-analyzer to resolve std library
           RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
         };
       }
