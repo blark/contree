@@ -91,14 +91,14 @@ pub fn process_archive(archive_path: &Path, show_layers: bool) -> Result<Node> {
             None
         };
 
-        apply_layer(&mut root, temp_path, layer_hash)?;
+        apply_layer(&mut root, temp_path, layer_hash.as_deref())?;
     }
 
     Ok(root)
 }
 
 /// Apply a single layer tar to the filesystem tree
-fn apply_layer(root: &mut Node, layer_path: &Path, layer_hash: Option<String>) -> Result<()> {
+fn apply_layer(root: &mut Node, layer_path: &Path, layer_hash: Option<&str>) -> Result<()> {
     let file = File::open(layer_path)
         .with_context(|| format!("Failed to open layer: {}", layer_path.display()))?;
 
@@ -125,7 +125,7 @@ fn apply_layer(root: &mut Node, layer_path: &Path, layer_hash: Option<String>) -
 fn process_layer_entries<R: Read>(
     root: &mut Node,
     archive: &mut Archive<R>,
-    layer_hash: Option<String>,
+    layer_hash: Option<&str>,
 ) -> Result<()> {
     for entry in archive.entries().context("Failed to read layer entries")? {
         let entry = match entry {
@@ -137,7 +137,7 @@ fn process_layer_entries<R: Read>(
             }
         };
 
-        if let Err(err) = apply_entry(root, entry, layer_hash.as_deref()) {
+        if let Err(err) = apply_entry(root, entry, layer_hash) {
             eprintln!("Warning: Failed to apply entry: {}", err);
             continue;
         }
@@ -184,16 +184,16 @@ fn apply_entry<R: Read>(
     // Apply regular entries
     match entry_type {
         tar::EntryType::Directory => {
-            root.ensure_path(normalized_path, mode, uid, gid, layer_hash.map(|s| s.to_string()));
+            root.ensure_path(normalized_path, mode, uid, gid, layer_hash);
         }
         tar::EntryType::Regular => {
-            root.put_file(normalized_path, mode, uid, gid, false, None, layer_hash.map(|s| s.to_string()));
+            root.put_file(normalized_path, mode, uid, gid, false, None, layer_hash);
         }
         tar::EntryType::Symlink => {
             let link_target = header.link_name()
                 .context("Failed to read symlink target")?
                 .map(|p| p.to_string_lossy().to_string());
-            root.put_file(normalized_path, mode, uid, gid, true, link_target, layer_hash.map(|s| s.to_string()));
+            root.put_file(normalized_path, mode, uid, gid, true, link_target, layer_hash);
         }
         tar::EntryType::Link => {
             // Hard link support
@@ -201,20 +201,15 @@ fn apply_entry<R: Read>(
                 .context("Failed to read hard link target")?
                 .map(|p| p.to_string_lossy().to_string());
 
-            // For hard links, we create a file node but store the link target
-            // The renderer can decide how to display this
-            root.put_file(normalized_path, mode, uid, gid, false, None, layer_hash.map(|s| s.to_string()));
+            // Create the file node first
+            root.put_file(normalized_path, mode, uid, gid, false, None, layer_hash);
 
-            // Store hard link info in the node
-            let (dir_path, basename) = split_path(normalized_path);
-            let mut parent = root;
-            if !dir_path.is_empty() {
-                for part in dir_path.split('/').filter(|p| !p.is_empty()) {
-                    parent = parent.children.get_mut(part).expect("parent should exist");
+            // Then set the hard link target
+            if let Some(target) = link_target {
+                if let Err(e) = root.set_hardlink_target(normalized_path, target) {
+                    // Log warning but don't fail - the file still exists
+                    eprintln!("Warning: Failed to set hard link target: {}", e);
                 }
-            }
-            if let Some(node) = parent.children.get_mut(basename) {
-                node.metadata.hardlink_target = link_target;
             }
         }
         _ => {
@@ -223,13 +218,4 @@ fn apply_entry<R: Read>(
     }
 
     Ok(())
-}
-
-fn split_path(path: &str) -> (&str, &str) {
-    let path = path.trim_end_matches('/');
-    if let Some(pos) = path.rfind('/') {
-        (&path[..pos], &path[pos + 1..])
-    } else {
-        ("", path)
-    }
 }

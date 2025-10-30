@@ -1,5 +1,6 @@
-/// Docker whiteout handling for layer deletions
+use crate::utils;
 
+/// Docker whiteout handling for layer deletions
 const WHITEOUT_PREFIX: &str = ".wh.";
 const OPAQUE_WHITEOUT: &str = ".wh..wh..opq";
 
@@ -18,11 +19,11 @@ pub fn is_opaque(path: &str) -> bool {
 /// Extract the target path from a whiteout marker path
 /// Example: "dir/.wh.file" -> "dir/file"
 pub fn whiteout_target(path: &str) -> String {
-    let (dir_path, basename) = split_path(path);
+    let (dir_path, basename) = utils::split_path(path);
 
     // Strip the ".wh." prefix
-    let target_basename = if basename.starts_with(WHITEOUT_PREFIX) {
-        &basename[WHITEOUT_PREFIX.len()..]
+    let target_basename = if let Some(stripped) = basename.strip_prefix(WHITEOUT_PREFIX) {
+        stripped
     } else {
         basename
     };
@@ -37,17 +38,8 @@ pub fn whiteout_target(path: &str) -> String {
 /// Get the directory path from an opaque whiteout marker
 /// Example: "foo/bar/.wh..wh..opq" -> "foo/bar"
 pub fn opaque_dir(path: &str) -> &str {
-    let (dir_path, _) = split_path(path);
+    let (dir_path, _) = utils::split_path(path);
     dir_path
-}
-
-fn split_path(path: &str) -> (&str, &str) {
-    let path = path.trim_end_matches('/');
-    if let Some(pos) = path.rfind('/') {
-        (&path[..pos], &path[pos + 1..])
-    } else {
-        ("", path)
-    }
 }
 
 #[cfg(test)]

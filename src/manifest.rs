@@ -22,12 +22,11 @@ pub fn parse_manifest(manifest_bytes: &[u8]) -> Result<Vec<String>> {
     let manifest: Vec<ManifestEntry> = serde_json::from_slice(manifest_bytes)
         .context("Failed to parse manifest.json")?;
 
-    if manifest.is_empty() {
-        anyhow::bail!("Empty manifest");
-    }
+    // Get the first manifest entry (most archives have only one)
+    let entry = manifest.into_iter().next()
+        .ok_or_else(|| anyhow::anyhow!("Empty manifest"))?;
 
-    // Return the layers from the first image entry
-    Ok(manifest[0].layers.clone())
+    Ok(entry.layers)
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::utils;
 
 /// Represents a node in the merged filesystem tree
 #[derive(Debug, Clone)]
@@ -75,7 +76,7 @@ impl Node {
     }
 
     /// Ensure a directory path exists in the tree, creating intermediate dirs as needed
-    pub fn ensure_path(&mut self, path: &str, mode: u32, uid: u64, gid: u64, layer_hash: Option<String>) {
+    pub fn ensure_path(&mut self, path: &str, mode: u32, uid: u64, gid: u64, layer_hash: Option<&str>) {
         if path.is_empty() || path == "." {
             return;
         }
@@ -87,11 +88,12 @@ impl Node {
             current = current.children
                 .entry(part.to_string())
                 .or_insert_with(|| Node::new_dir(mode, uid, gid));
-            current.metadata.layer_hash = layer_hash.clone();
+            current.metadata.layer_hash = layer_hash.map(|s| s.to_string());
         }
     }
 
     /// Add or update a file at the given path
+    #[allow(clippy::too_many_arguments)]
     pub fn put_file(
         &mut self,
         path: &str,
@@ -100,20 +102,23 @@ impl Node {
         gid: u64,
         is_symlink: bool,
         link_target: Option<String>,
-        layer_hash: Option<String>,
+        layer_hash: Option<&str>,
     ) {
-        let (dir_path, basename) = split_path(path);
+        let (dir_path, basename) = utils::split_path(path);
 
         // Ensure parent directory exists
         if !dir_path.is_empty() {
-            self.ensure_path(dir_path, 0o755, 0, 0, layer_hash.clone());
+            self.ensure_path(dir_path, 0o755, 0, 0, layer_hash);
         }
 
         // Navigate to parent directory
         let mut parent = self;
         if !dir_path.is_empty() {
             for part in dir_path.split('/').filter(|p| !p.is_empty() && *p != ".") {
-                parent = parent.children.get_mut(part).expect("parent dir should exist");
+                // If parent doesn't exist, create it
+                parent = parent.children
+                    .entry(part.to_string())
+                    .or_insert_with(|| Node::new_dir(0o755, 0, 0));
             }
         }
 
@@ -121,14 +126,36 @@ impl Node {
         let mut file_node = Node::new_file(mode, uid, gid);
         file_node.metadata.is_symlink = is_symlink;
         file_node.metadata.symlink_target = link_target;
-        file_node.metadata.layer_hash = layer_hash;
+        file_node.metadata.layer_hash = layer_hash.map(|s| s.to_string());
 
         parent.children.insert(basename.to_string(), file_node);
     }
 
+    /// Set hard link target for a file node
+    /// Returns Ok(()) if successful, Err if the path doesn't exist
+    pub fn set_hardlink_target(&mut self, path: &str, target: String) -> anyhow::Result<()> {
+        let (dir_path, basename) = utils::split_path(path);
+
+        let mut parent = self;
+        if !dir_path.is_empty() {
+            for part in dir_path.split('/').filter(|p| !p.is_empty() && *p != ".") {
+                parent = parent.children
+                    .get_mut(part)
+                    .ok_or_else(|| anyhow::anyhow!("Parent directory '{}' not found", part))?;
+            }
+        }
+
+        let node = parent.children
+            .get_mut(basename)
+            .ok_or_else(|| anyhow::anyhow!("File '{}' not found", basename))?;
+
+        node.metadata.hardlink_target = Some(target);
+        Ok(())
+    }
+
     /// Remove a node at the given path (for whiteouts)
     pub fn remove(&mut self, path: &str) {
-        let (dir_path, basename) = split_path(path);
+        let (dir_path, basename) = utils::split_path(path);
 
         let mut parent = self;
         if !dir_path.is_empty() {
@@ -164,27 +191,9 @@ impl Node {
     }
 }
 
-/// Split a path into (directory, basename)
-fn split_path(path: &str) -> (&str, &str) {
-    let path = path.trim_end_matches('/');
-    if let Some(pos) = path.rfind('/') {
-        (&path[..pos], &path[pos + 1..])
-    } else {
-        ("", path)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_split_path() {
-        assert_eq!(split_path("foo/bar"), ("foo", "bar"));
-        assert_eq!(split_path("foo/bar/baz"), ("foo/bar", "baz"));
-        assert_eq!(split_path("file"), ("", "file"));
-        assert_eq!(split_path("foo/bar/"), ("foo", "bar"));
-    }
 
     #[test]
     fn test_ensure_path() {

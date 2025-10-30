@@ -126,8 +126,8 @@ fn render_node<W: Write>(
         let branch = if is_last { "└── " } else { "├── " };
 
         if options.use_color {
-            write!(writer, "{}{}{}{}{}",
-                options.theme.tree_chars, prefix, branch, COLOR_RESET, "")?;
+            write!(writer, "{}{}{}{}",
+                options.theme.tree_chars, prefix, branch, COLOR_RESET)?;
         } else {
             write!(writer, "{}{}", prefix, branch)?;
         }

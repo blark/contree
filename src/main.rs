@@ -7,6 +7,7 @@ mod manifest;
 mod render;
 mod theme;
 mod tree;
+mod utils;
 mod whiteout;
 
 #[derive(Parser)]
