@@ -23,10 +23,10 @@ Contree is a command-line tool that renders the complete, merged filesystem of a
 
 ```bash
 # Run directly without installing
-nix run github:blark/ctree -- image.tar
+nix run github:blark/contree -- image.tar
 
 # Install to your profile
-nix profile install github:blark/ctree
+nix profile install github:blark/contree
 
 # Or build locally
 nix build
