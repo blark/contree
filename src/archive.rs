@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek};
 use std::path::Path;
 use tar::{Archive, Entry};
 
@@ -78,11 +78,17 @@ pub fn process_archive(archive_path: &Path, show_layers: bool) -> Result<Node> {
         }
 
         // Check if this is a layer tar file
-        if path_str.ends_with("/layer.tar") || path_str.ends_with(".tar") || path_str.ends_with(".tar.gz") {
+        if path_str.ends_with("/layer.tar")
+            || path_str.ends_with(".tar")
+            || path_str.ends_with(".tar.gz")
+            || path_str.ends_with(".tgz")
+            || path_str.ends_with("/layer.tar.gz") {
             // Save layer to temp file, preserving the extension
             let layer_name = path_str.to_string();
-            let extension = if path_str.ends_with(".tar.gz") {
+            let extension = if path_str.ends_with(".tar.gz") || path_str.ends_with("/layer.tar.gz") {
                 ".tar.gz"
+            } else if path_str.ends_with(".tgz") {
+                ".tgz"
             } else {
                 ".tar"
             };
@@ -122,11 +128,23 @@ pub fn process_archive(archive_path: &Path, show_layers: bool) -> Result<Node> {
 
 /// Apply a single layer tar to the filesystem tree
 fn apply_layer(root: &mut Node, layer_path: &Path, layer_hash: Option<&str>) -> Result<()> {
-    let file = File::open(layer_path)
+    let mut file = File::open(layer_path)
         .with_context(|| format!("Failed to open layer: {}", layer_path.display()))?;
 
-    // Check if layer is gzipped
-    let is_gzipped = layer_path.to_string_lossy().ends_with(".gz");
+    // Check if layer is gzipped - first check extension, then magic bytes
+    let is_gzipped = layer_path.to_string_lossy().ends_with(".gz")
+        || layer_path.to_string_lossy().ends_with(".tgz")
+        || {
+            // Check magic bytes: gzip files start with 0x1f 0x8b
+            let mut magic = [0u8; 2];
+            if file.read_exact(&mut magic).is_ok() {
+                file.seek(std::io::SeekFrom::Start(0)).ok();
+                magic == [0x1f, 0x8b]
+            } else {
+                file.seek(std::io::SeekFrom::Start(0)).ok();
+                false
+            }
+        };
 
     if is_gzipped {
         let decoder = GzDecoder::new(file);
